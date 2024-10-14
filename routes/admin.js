@@ -22,14 +22,50 @@ const isAdmin = (req, res, next) => {
 // CRUD-operations for users
 router.get("/users", authorizeJwt, isAdmin, async (req, res) => {
     try {
-        const users = await User.find().populate("order");
+        const { role, exact } = req.query; // exact 参数决定是否要精确匹配
+        const filter = {};
+
+        // 检查是否有多个角色
+        if (Array.isArray(role)) {
+            // 如果需要精确匹配且包含一个角色
+            if (exact === "true") {
+                filter.roles = {
+                    $size: 1,
+                    $elemMatch: { $in: role },
+                };
+            }
+            // 如果需要查找同时包含多个角色
+            else if (role.includes("user") && role.includes("admin")) {
+                filter.roles = { $all: ["user", "admin"] };
+            } else {
+                filter.roles = { $in: role };
+            }
+        } else if (role) {
+            // 处理单个角色
+            if (exact === "true") {
+                filter.roles = {
+                    $size: 1,
+                    $elemMatch: { $eq: role },
+                };
+            } else {
+                filter.roles = { $in: [role] };
+            }
+        }
+        // filter.roles = { $ne: "admin" }; // 过滤掉 admin
+        // filter.roles = { $all: Array.isArray(roles) ? roles : [roles] }; // 确保将单个值转为数组
+
+        console.log(filter);
+        const users = await User.find(filter);
+        // const users = await User.find({ roles: { $ne: "admin" } });
+        // const users = await User.find({ roles: { $in: ["user"] } });
+
         return res.status(200).json({ users });
     } catch (error) {
         res.status(500).json({ message: "Server error" });
     }
 });
 
-router.post("/add-user", authorizeJwt, isAdmin, async (req, res) => {
+router.post("/user", authorizeJwt, isAdmin, async (req, res) => {
     try {
         const { name, email, password, roles } = req.body;
 
@@ -48,62 +84,50 @@ router.post("/add-user", authorizeJwt, isAdmin, async (req, res) => {
             roles: roles || ["user"],
         });
 
-        return res.status(200).json({ newUser });
+        return res.status(200).json(newUser);
     } catch (error) {
         res.status(500).json({ message: "Server error" });
     }
 });
 
-router.patch("/update-user/:id", authorizeJwt, isAdmin, async (req, res) => {
-    try {
-        const findUser = await User.findById(req.params.id);
-        if (!findUser) {
-            return res.status(404).json({ message: "User not found" });
-        }
-
-        //在order list中，找到用户id对应的订单，如果将来处理涉及多个异步操作时，Promise.all() 可能会派上用场
-        const findOrder = await Order.find({ user: req.params.id });
-        if (findOrder.length === 0) {
-            console.log("This user has no order");
-        }
-        for (const order of findOrder) {
-            if (!findUser.order.includes(order._id)) {
-                findUser.order.push(order._id);
+router
+    .route("/user/:id")
+    .patch(authorizeJwt, isAdmin, async (req, res) => {
+        try {
+            const user = await User.findById(req.params.id);
+            if (!user) {
+                return res.status(404).json({ message: "User not found" });
             }
-        }
-        const addOrdersToUser = await findUser.save();
 
-        //findByIdAndUpdate() 方法会自动查找用户并进行更新，如果找不到用户，它会返回 null。
-        const updatedUser = await User.findByIdAndUpdate(
-            req.params.id,
-            { $set: req.body },
-            // req.body, //使用 $set：只更新传入的字段，其他字段保持不变。不使用 $set：直接替换整个文档，导致未在 req.body 中包含的字段丢失。
-            { new: true } //表示返回更新后的文档（新的数据），而不是更新前的旧文档。默认情况下，findByIdAndUpdate 会返回旧文档，如果你想要返回更新后的数据，就需要设置 { new: true }。
-        );
-        if (!updatedUser) {
-            return res.status(404).json({ message: "User not found" });
-        }
+            const updatedUser = await User.findByIdAndUpdate(
+                req.params.id,
+                { $set: req.body },
+                // req.body, //使用 $set：只更新传入的字段，其他字段保持不变。不使用 $set：直接替换整个文档，导致未在 req.body 中包含的字段丢失。
+                { new: true } //表示返回更新后的文档（新的数据），而不是更新前的旧文档。默认情况下，findByIdAndUpdate 会返回旧文档，如果你想要返回更新后的数据，就需要设置 { new: true }。
+            );
+            if (!updatedUser) {
+                return res.status(404).json({ message: "User not found" });
+            }
 
-        return res.status(200).json({ updatedUser });
-    } catch (error) {
-        res.status(500).json({ message: "Server error" });
-    }
-});
-
-router.delete("/delete-user/:id", authorizeJwt, isAdmin, async (req, res) => {
-    try {
-        const deletedUser = await User.findByIdAndDelete(req.params.id);
-        if (!deletedUser) {
-            return res.status(404).json({ message: "User not found" });
+            return res.status(200).json({ updatedUser });
+        } catch (error) {
+            res.status(500).json({ message: "Server error" });
         }
-        res.status(200).json({
-            message: "User deleted successfully",
-            deletedUser,
-        });
-    } catch (error) {
-        res.status(500).json({ message: "Server error" });
-    }
-});
+    })
+    .delete(authorizeJwt, isAdmin, async (req, res) => {
+        try {
+            const deletedUser = await User.findByIdAndDelete(req.params.id);
+            if (!deletedUser) {
+                return res.status(404).json({ message: "User not found" });
+            }
+            res.status(200).json({
+                message: "User deleted successfully",
+                deletedUser,
+            });
+        } catch (error) {
+            res.status(500).json({ message: "Server error" });
+        }
+    });
 
 // CRUD-operations for products
 router.get("/products", authorizeJwt, isAdmin, async (req, res) => {
@@ -115,7 +139,7 @@ router.get("/products", authorizeJwt, isAdmin, async (req, res) => {
     }
 });
 
-router.post("/add-product", authorizeJwt, isAdmin, async (req, res) => {
+router.post("/product", authorizeJwt, isAdmin, async (req, res) => {
     try {
         const newProduct = await Product.create(req.body);
         return res.status(200).json({ newProduct });
@@ -125,27 +149,27 @@ router.post("/add-product", authorizeJwt, isAdmin, async (req, res) => {
 });
 
 // PUT or PATCH ???
-router.patch("/update-product/:id", authorizeJwt, isAdmin, async (req, res) => {
-    try {
-        const updatedProduct = await Product.findByIdAndUpdate(
-            req.params.id,
-            { $set: req.body },
-            { new: true }
-        );
-        if (!updatedProduct) {
-            return res.status(404).json({ message: "Product not found" });
+router
+    .route("/product/:id")
+    .patch(authorizeJwt, isAdmin, async (req, res) => {
+        try {
+            const updatedProduct = await Product.findByIdAndUpdate(
+                req.params.id,
+                { $set: req.body },
+                { new: true }
+            );
+            if (!updatedProduct) {
+                return res.status(404).json({ message: "Product not found" });
+            }
+            return res.status(200).json({ updatedProduct });
+        } catch (error) {
+            res.status(500).json({
+                message: "Server error",
+                error: error.message,
+            });
         }
-        return res.status(200).json({ updatedProduct });
-    } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
-    }
-});
-
-router.delete(
-    "/delete-product/:id",
-    authorizeJwt,
-    isAdmin,
-    async (req, res) => {
+    })
+    .delete(authorizeJwt, isAdmin, async (req, res) => {
         try {
             const deletedProduct = await Product.findByIdAndDelete(
                 req.params.id
@@ -163,8 +187,8 @@ router.delete(
                 error: error.message,
             });
         }
-    }
-);
+    });
+
 // CRUD-operations for orders
 
 router.get("/orders", authorizeJwt, isAdmin, async (req, res) => {
@@ -178,7 +202,7 @@ router.get("/orders", authorizeJwt, isAdmin, async (req, res) => {
     }
 });
 
-router.post("/add-order", authorizeJwt, isAdmin, async (req, res) => {
+router.post("/order", authorizeJwt, isAdmin, async (req, res) => {
     try {
         // 首先验证用户是否存在
         const existingUser = await User.findById(req.body.user);
@@ -190,7 +214,7 @@ router.post("/add-order", authorizeJwt, isAdmin, async (req, res) => {
         const newOrder = await Order.create(req.body);
 
         // 将订单ID添加到用户的order列表中
-        existingUser.order.push(newOrder._id);
+        existingUser.orders.push(newOrder._id);
         await existingUser.save();
 
         // 返回新订单
@@ -202,86 +226,76 @@ router.post("/add-order", authorizeJwt, isAdmin, async (req, res) => {
     }
 });
 
-router.patch("/update-order/:id", authorizeJwt, isAdmin, async (req, res) => {
-    try {
-        const existingOrder = await Order.findById(req.params.id);
+router
+    .route("/order/:id")
+    .patch(authorizeJwt, isAdmin, async (req, res) => {
+        try {
+            const existingOrder = await Order.findById(req.params.id);
 
-        if (!existingOrder) {
-            return res.status(404).json({ message: "Order not found" });
-        }
+            if (!existingOrder) {
+                return res.status(404).json({ message: "Order not found" });
+            }
 
-        const updateFields = {};
-        if (
-            existingOrder.shippingResult.status === "processing" &&
-            existingOrder.paymentResult.status === "succeeded"
-        ) {
-            updateFields.orderStatus = "paid";
-        }
-        if (
-            existingOrder.shippingResult.status === "succeeded" &&
-            existingOrder.paymentResult.status === "succeeded"
-        ) {
-            updateFields.orderStatus = "shipped";
-        }
+            const updateFields = {};
+            if (
+                existingOrder.shippingResult.status === "processing" &&
+                existingOrder.paymentResult.status === "succeeded"
+            ) {
+                updateFields.orderStatus = "paid";
+            }
+            if (
+                existingOrder.shippingResult.status === "succeeded" &&
+                existingOrder.paymentResult.status === "succeeded"
+            ) {
+                updateFields.orderStatus = "shipped";
+            }
 
-        if (existingOrder.paymentResult.status === "cancelled") {
-            updateFields.orderStatus = "cancelled";
-            updateFields.shippingResult.status = "cancelled";
-        }
+            if (existingOrder.paymentResult.status === "cancelled") {
+                updateFields.orderStatus = "cancelled";
+                updateFields.shippingResult.status = "cancelled";
+            }
 
-        const updatedOrder = await Order.findByIdAndUpdate(
-            req.params.id,
-            {
-                $set: updateFields,
-            },
-            { new: true }
-        );
+            const updatedOrder = await Order.findByIdAndUpdate(
+                req.params.id,
+                {
+                    $set: updateFields,
+                },
+                { new: true }
+            );
 
-        return res
-            .status(200)
-            .json({ message: "Order updated successfully", updatedOrder });
-    } catch (error) {
-        res.status(500).json({ message: "Server error" });
-    }
-});
-
-router.delete("/delete-order/:id", authorizeJwt, isAdmin, async (req, res) => {
-    try {
-        const existingOrder = await Order.findById(req.params.id);
-        if (!existingOrder) {
-            return res.status(404).json({ message: "Order not found" });
-        }
-
-        if (existingOrder.orderStatus === "cancelled") {
-            const deletedOrder = await Order.findByIdAndDelete(req.params.id);
             return res
                 .status(200)
-                .json({ message: "Order deleted successfully", deletedOrder });
-        } else {
-            return res.status(400).json({
-                message:
-                    "Order's status is not cancelled. Order cannot be deleted",
-            });
+                .json({ message: "Order updated successfully", updatedOrder });
+        } catch (error) {
+            res.status(500).json({ message: "Server error" });
         }
-    } catch (error) {
-        res.status(500).json({ message: "Server error" });
-    }
-});
+    })
+    .delete(authorizeJwt, isAdmin, async (req, res) => {
+        try {
+            const existingOrder = await Order.findById(req.params.id);
+            if (!existingOrder) {
+                return res.status(404).json({ message: "Order not found" });
+            }
+
+            if (existingOrder.orderStatus === "cancelled") {
+                const deletedOrder = await Order.findByIdAndDelete(
+                    req.params.id
+                );
+                return res.status(200).json({
+                    message: "Order deleted successfully",
+                    deletedOrder,
+                });
+            } else {
+                return res.status(400).json({
+                    message:
+                        "Order's status is not cancelled. Order cannot be deleted",
+                });
+            }
+        } catch (error) {
+            res.status(500).json({ message: "Server error" });
+        }
+    });
 export default router;
-
-// {
-//     "name": "Alice",
-//     "email": "alice@example.com",
-//     "password": "hashed_password_123",
-//     "roles": "user",
-// }
-
-// {
-//     "name": "Bob",
-//     "email": "bob@example.com",
-//     "password": "hashed_password_456",
-//     "roles": ["user"]
-// }
 
 // {
 //     "name": "Charlie",

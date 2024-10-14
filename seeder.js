@@ -41,7 +41,7 @@ const seed = async () => {
         for (const order of createdOrders) {
             const user = await User.findById(order.user);
             if (user) {
-                user.order.push(order._id);
+                user.orders.push(order._id);
                 await user.save();
             }
         }

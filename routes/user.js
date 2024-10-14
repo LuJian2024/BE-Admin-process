@@ -4,7 +4,12 @@ import Order from "../models/orderSchema.js";
 
 const router = express.Router();
 
-router.patch("/update-order/:id", async (req, res) => {
+router.get("/orders", async (req, res) => {
+    try {
+        const orders = await User.findById(req.user._id).populate("orders");
+    } catch (error) {}
+});
+router.patch("/order/:id", async (req, res) => {
     try {
         const existingOrder = await Order.findById(req.params.id);
         if (!existingOrder) {
@@ -60,7 +65,7 @@ router.patch("/update-order/:id", async (req, res) => {
 //   }}
 //---------------------------------------
 
-router.delete("/delete-order/:id", async (req, res) => {
+router.delete("/order/:id", async (req, res) => {
     try {
         const existingOrder = await Order.findById(req.params.id);
         if (!existingOrder) {

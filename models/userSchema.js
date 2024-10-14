@@ -24,7 +24,7 @@ const userSchema = new Schema({
     //     enum: ["user", "admin"],
     //     default: "user",
     // },
-    order: [
+    orders: [
         {
             type: Schema.Types.ObjectId,
             ref: "Order",

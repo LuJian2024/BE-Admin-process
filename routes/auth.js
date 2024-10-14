@@ -28,7 +28,7 @@ router.get("/", authorizeJwt, async (req, res) => {
         // 登录成功，根据用户角色返回相应的数据。如果是admin，则返回用户列表和他的订单信息，所有货物信息以及所有订单信息。
         if (roles.includes("admin")) {
             const usersList = await User.find()
-                .populate("order")
+                .populate("orders")
                 .select("-password"); //不显示密码
             const productsList = await Product.find();
             const ordersList = await Order.find()
@@ -54,7 +54,7 @@ router.get("/", authorizeJwt, async (req, res) => {
                 // .select('-password') 用于从结果中排除 password 字段。
                 const userWithOrders = await User.findById({ _id })
                     .populate({
-                        path: "order",
+                        path: "orders",
                         populate: {
                             path: "orderItems.product",
                             model: "Product",
@@ -74,7 +74,7 @@ router.get("/", authorizeJwt, async (req, res) => {
         if (roles.includes("user")) {
             const userWithOrders = await User.findById({ _id })
                 .populate({
-                    path: "order",
+                    path: "orders",
                     populate: {
                         path: "orderItems.product",
                         model: "Product",
