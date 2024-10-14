@@ -16,16 +16,8 @@ router.get("/", authorizeJwt, async (req, res) => {
         console.log(req.user);
         // 登录成功，根据用户角色跳转
         // if (roles.includes("admin")) {
-        //     return res.status(200).json({
-        //         message: "Login successful. Admin access",
-        //         url: "http://localhost:3000/auth/admins",
-        //     });
         //     // return res.redirect("http://localhost:3000/admin/users");
         // } else if (roles.includes("user")) {
-        //     return res.status(200).json({
-        //         message: "Login successful. User access",
-        //         url: "http://localhost:3000/auth/users",
-        //     });
         //     // return res.redirect("http://localhost:3000/user/orders");
         // } else {
         //     return res
@@ -53,8 +45,21 @@ router.get("/", authorizeJwt, async (req, res) => {
 
             // 如果用户同时是 admin 和 user，返回个人订单信息
             if (roles.includes("user")) {
+                // const userWithOrders = await User.findById({ _id })
+                //     .populate("order")
+                //     .select("-password");
+                //链式 populate(). 通过 嵌套的 populate() 来进一步填充 order 中的 productId（或其他嵌套的字段）
+                // 第一层 populate() 填充 User 中的 order 字段。
+                // 第二层 populate() 在 order 中进一步填充 productId 字段，获取与 productId 关联的 Product 数据。
+                // .select('-password') 用于从结果中排除 password 字段。
                 const userWithOrders = await User.findById({ _id })
-                    .populate("order")
+                    .populate({
+                        path: "order",
+                        populate: {
+                            path: "orderItems.product",
+                            model: "Product",
+                        },
+                    })
                     .select("-password");
                 response.personal = {
                     message:
@@ -68,15 +73,19 @@ router.get("/", authorizeJwt, async (req, res) => {
         //如果是user，则返回他本人的信息和相关的订单信息。
         if (roles.includes("user")) {
             const userWithOrders = await User.findById({ _id })
-                .populate("order")
-                .select("-password"); //不显示密码
+                .populate({
+                    path: "order",
+                    populate: {
+                        path: "orderItems.product",
+                        model: "Product",
+                    },
+                })
+                .select("-password");
             return res.status(200).json({
                 message: "Login successful. User access, here is your orders",
                 userWithOrders,
             });
         }
-
-        // return res.status(200).json({ orders });
     } catch (error) {
         res.status(500).json({ message: "Server error" });
     }
