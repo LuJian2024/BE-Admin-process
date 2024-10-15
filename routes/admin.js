@@ -138,7 +138,9 @@ router.get("/products", authorizeJwt, isAdmin, async (req, res) => {
         const sortDirection = req.query.sortDirection === "asc" ? 1 : -1;
         const sortBy = req.query.sortBy || "price";
 
-        const products = await Product.find({ category: req.query.category })
+        const products = await Product.find({
+            $or: [{ category: req.query.category }, { name: req.query.name }],
+        })
             .limit(limit)
             .skip(page * limit) // 正确的分页逻辑，因为 page 是从 0 开始的，所以需要乘以 limit
             .sort({
